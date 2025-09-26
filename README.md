@@ -1,0 +1,2 @@
+# MCPTest
+Testing basic MCP
