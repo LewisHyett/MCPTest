@@ -1,0 +1,17 @@
+{
+  schema_version v1,
+  name_for_human Markdown Reader,
+  name_for_model markdown_reader,
+  description_for_human Reads and returns the contents of a markdown file.,
+  description_for_model Use this plugin to fetch the raw contents of a markdown file.,
+  auth {
+    type none
+  },
+  api {
+    type openapi,
+    url httpsyourdomain.comopenapi.yaml
+  },
+  logo_url httpsyourdomain.comlogo.png,
+  contact_email admin@yourdomain.com,
+  legal_info_url httpsyourdomain.comlegal
+}
