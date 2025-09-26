@@ -1,0 +1,19 @@
+openapi: 3.0.1
+info:
+  title: Markdown Reader API
+  description: Simple API that serves a markdown file.
+  version: 1.0.0
+servers:
+  - url: https://yourdomain.com
+paths:
+  /example.md:
+    get:
+      operationId: getMarkdown
+      summary: Get the markdown file
+      responses:
+        '200':
+          description: Raw markdown file
+          content:
+            text/markdown:
+              schema:
+                type: string
