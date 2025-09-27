@@ -1,19 +1,26 @@
-openapi: 3.0.1
+openapi: 3.0.0
 info:
-  title: Markdown Reader API
-  description: Simple API that serves a markdown file.
+  title: AL Coding Standards API
   version: 1.0.0
+  description: API to access AL coding standards markdown document
 servers:
-  - url: https://yourdomain.com
+  - url: https://api.github.com/repos/your-username/your-repo-name/contents
 paths:
-  /example.md:
+  /coding-standards.md:
     get:
-      operationId: getMarkdown
-      summary: Get the markdown file
+      summary: Get AL coding standards
+      description: Retrieves the content of the AL coding standards markdown file
       responses:
         '200':
-          description: Raw markdown file
+          description: Successful response
           content:
-            text/markdown:
+            application/json:
               schema:
-                type: string
+                type: object
+                properties:
+                  content:
+                    type: string
+                    description: Base64 encoded markdown content
+                  encoding:
+                    type: string
+                    example: "base64"
