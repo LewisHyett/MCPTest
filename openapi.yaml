@@ -27,3 +27,27 @@ paths:
                   name:
                     type: string
                     example: "README.md"
+
+  /persona.md:
+    get:
+      summary: Get reviewer persona markdown
+      description: Retrieves the persona used to shape review tone and output format
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: string
+                    description: Base64 encoded markdown content
+                  encoding:
+                    type: string
+                    example: "base64"
+                  name:
+                    type: string
+                    example: "persona.md"
+
+
