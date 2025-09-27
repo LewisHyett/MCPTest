@@ -9,9 +9,9 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://LewisHyett.github.io/MCPTest/openapi.yaml"
+    "url": "https://lewishyett.github.io/MCPTest/openapi.yaml"
   },
-  "logo_url": "https://LewisHyett.github.io/MCPTest/logo.png",
+  "logo_url": "https://lewishyett.github.io/MCPTest/logo.png",
   "contact_email": "dev-team@totalenterprisesolutions.com",
   "legal_info_url": "https://totalenterprisesolutions.com/legal"
 }
