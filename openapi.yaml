@@ -50,24 +50,4 @@ paths:
                     type: string
                     example: "persona.md"
 
-  /standards.json:
-    get:
-      summary: Get machine-readable AL coding standards
-      description: Retrieves a JSON ruleset representing the TES AL coding standards
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  content:
-                    type: string
-                    description: Base64 encoded JSON rules content
-                  encoding:
-                    type: string
-                    example: "base64"
-                  name:
-                    type: string
-                    example: "standards.json"
+

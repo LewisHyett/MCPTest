@@ -3,7 +3,7 @@
   "name_for_human": "AL Coding Standards",
   "name_for_model": "al_coding_standards",
   "description_for_human": "Provides TES AL coding guidelines plus a senior reviewer persona and machine-readable standards.",
-  "description_for_model": "Use this plugin to fetch: 1) README.md standards (human), 2) standards.json (machine rules), 3) persona.md (tone/output). Apply these when reviewing AL code and proposing diffs.",
+  "description_for_model": "Use this plugin to fetch: 1) README.md standards (human), 2) persona.md (tone/output). Apply these when reviewing AL code and proposing diffs.",
   "auth": {
     "type": "none"
   },
