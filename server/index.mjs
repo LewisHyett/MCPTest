@@ -44,7 +44,7 @@ function extractProcedures(content) {
 }
 
 function hasXmlDocAbove(content, name) {
-  const rx = new RegExp(`///[\\s\\S]*?\n\s*(?:procedure|local\\s+procedure|trigger)\\s+${name}\\b`);
+  const rx = new RegExp(`///[\\s\\S]*?\\n\\s*(?:procedure|local\\s+procedure|trigger)\\s+${name}\\b`);
   return rx.test(content);
 }
 
@@ -92,7 +92,7 @@ function lintFile(filePath, content, rules) {
   if (varBlock) {
     const varNames = [...varBlock[1].matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map(m => m[1]);
     for (const v of varNames) {
-      const rx = new RegExp(`\b${v}\b`, 'g');
+      const rx = new RegExp(`\\b${escapeRegExp(v)}\\b`, 'g');
       const count = (content.match(rx) || []).length;
       if (count <= 1) {
         findings.push({ severity: 'minor', rule: 'unusedVariable', file: filePath, message: `Variable '${v}' appears unused.` });
@@ -118,24 +118,31 @@ async function lintRepo(root, globs, rules) {
 function renderReview(persona, findings, opts = {}) {
   const bySeverity = { blocker: [], major: [], minor: [], info: [] };
   for (const f of findings) bySeverity[f.severity ?? 'info'].push(f);
+  const sevIcon = { blocker: '⛔', major: '❗', minor: '⚠️', info: '💡' };
   const lines = [];
-  lines.push('Summary');
+  lines.push('## Summary');
   const total = findings.length;
   const sev = Object.entries(bySeverity).map(([k,v]) => `${k}:${v.length}`).join(', ');
-  lines.push(`- Checked ${total} findings. Severity: ${sev}`);
-  if (opts.focus) lines.push(`- Focus: ${opts.focus.join(', ')}`);
+  lines.push(`- ✅ Analyzed repository. Findings: ${total}.`);
+  lines.push(`- 🧭 Severity breakdown: ${sev}.`);
+  if (opts.focus?.length) lines.push(`- 🎯 Focus: ${opts.focus.join(', ')}`);
   lines.push('');
-  lines.push('Findings');
-  let i = 1;
-  for (const f of findings) {
-    lines.push(`${i++}. [${f.severity}] ${f.rule} — ${f.message} (${f.file})`);
+  lines.push('## Findings');
+  if (!findings.length) {
+    lines.push('- ✅ No issues found against current rules.');
+  } else {
+    let i = 1;
+    for (const f of findings) {
+      const icon = sevIcon[f.severity] || '💡';
+      lines.push(`${i++}. ${icon} [${f.severity}] ${f.rule} — ${f.message} (${f.file})`);
+    }
   }
   lines.push('');
-  lines.push('Next steps');
-  lines.push('- Address major/blocker items first, then minors.');
-  lines.push('- Re-run lint and raise PR.');
+  lines.push('## Next steps');
+  lines.push('- [ ] Address major/blocker items first, then minors.');
+  lines.push('- [ ] Re-run lint and raise PR.');
   lines.push('');
-  lines.push('Reviewer persona');
+  lines.push('## Reviewer persona');
   lines.push(persona.split('\n').map(l => `> ${l}`).join('\n'));
   return lines.join('\n');
 }
@@ -154,6 +161,58 @@ async function main() {
         name: 'review_al_repository',
         description: 'Persona-shaped human review of AL code based on standards.json and persona.md',
         inputSchema: { type: 'object', properties: { repoPath: { type: 'string' }, focus: { type: 'array', items: { type: 'string' } } }, required: ['repoPath'] }
+      },
+      {
+        name: 'propose_fixes',
+        description: 'Suggest non-destructive edits for findings (does not apply changes).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repoPath: { type: 'string' },
+            focusRules: { type: 'array', items: { type: 'string' }, description: 'Optional rule filter, e.g., ["unusedVariable","xmlDoc"]' }
+          },
+          required: ['repoPath']
+        }
+      },
+      {
+        name: 'apply_edits',
+        description: 'Apply a previously proposed set of edits. Requires confirm=true.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repoPath: { type: 'string' },
+            files: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  file: { type: 'string' },
+                  edits: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        range: {
+                          type: 'object',
+                          properties: {
+                            start: { type: 'object', properties: { line: { type: 'number' }, column: { type: 'number' } }, required: ['line','column'] },
+                            end: { type: 'object', properties: { line: { type: 'number' }, column: { type: 'number' } }, required: ['line','column'] }
+                          },
+                          required: ['start','end']
+                        },
+                        newText: { type: 'string' }
+                      },
+                      required: ['range','newText']
+                    }
+                  }
+                },
+                required: ['file','edits']
+              }
+            },
+            confirm: { type: 'boolean', description: 'Must be true to write changes' }
+          },
+          required: ['repoPath','files','confirm']
+        }
       }
     ]
   }));
@@ -172,6 +231,21 @@ async function main() {
       const text = renderReview(persona, findings, { focus: args.focus });
       return { content: [{ type: 'text', text }, { type: 'json', data: { findings } }] };
     }
+    if (name === 'propose_fixes') {
+      const findings = await lintRepo(repoPath, ['**/*.al'], standards);
+      const filtered = Array.isArray(args.focusRules) && args.focusRules.length
+        ? findings.filter(f => args.focusRules.includes(f.rule))
+        : findings;
+      const proposal = await proposeFixes(repoPath, filtered);
+      return { content: [{ type: 'json', data: proposal }] };
+    }
+    if (name === 'apply_edits') {
+      if (!args.confirm) {
+        return { content: [{ type: 'text', text: 'Edits not applied: confirm=false. Please review and re-run with confirm=true.' }] };
+      }
+      const result = await applyEdits(repoPath, args.files);
+      return { content: [{ type: 'json', data: result }] };
+    }
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
   });
 
@@ -179,7 +253,167 @@ async function main() {
   await server.connect(transport);
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+// ---------------- CLI mode for quick local tests ----------------
+async function cli() {
+  const cmd = process.argv[2];
+  if (!cmd || (cmd !== 'lint' && cmd !== 'review' && cmd !== 'propose' && cmd !== 'apply')) return false; // not CLI mode
+  const getArg = (name, def) => {
+    const i = process.argv.indexOf(name);
+    if (i !== -1 && i + 1 < process.argv.length) return process.argv[i + 1];
+    return def;
+  };
+  const repoPath = getArg('--repo', path.resolve(repoRoot, '..'));
+  const focusArg = getArg('--focus', '');
+  const focus = focusArg ? focusArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+  const persona = await loadPersona();
+  const standards = await loadStandards();
+  const findings = await lintRepo(repoPath, ['**/*.al'], standards);
+  if (cmd === 'lint') {
+    console.log(JSON.stringify({ findings }, null, 2));
+  } else if (cmd === 'review') {
+    const text = renderReview(persona, findings, { focus });
+    console.log(text);
+  } else if (cmd === 'propose') {
+    const proposal = await proposeFixes(repoPath, findings);
+    console.log(JSON.stringify(proposal, null, 2));
+  } else if (cmd === 'apply') {
+    const proposalPath = getArg('--proposal', 'proposal.json');
+    const confirm = (getArg('--confirm', 'false') === 'true');
+    if (!confirm) {
+      console.log('Edits not applied: confirm=false. Pass --confirm true to apply.');
+      return true;
+    }
+    const raw = await fs.readFile(proposalPath, 'utf-8');
+    const proposal = JSON.parse(raw);
+    const result = await applyEdits(repoPath, proposal.files || []);
+    console.log(JSON.stringify(result, null, 2));
+  }
+  return true;
+}
+
+(async () => {
+  try {
+    const handled = await cli();
+    if (!handled) await main();
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
+})();
+
+// helper
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ------- Fix proposal and application helpers -------
+async function proposeFixes(root, findings) {
+  const byFile = new Map();
+  for (const f of findings) {
+    if (!byFile.has(f.file)) byFile.set(f.file, []);
+    byFile.get(f.file).push(f);
+  }
+  const files = [];
+  for (const [rel, flist] of byFile.entries()) {
+    const abs = path.join(root, rel);
+    const text = await fs.readFile(abs, 'utf-8');
+    const lines = text.split(/\r?\n/);
+    const edits = [];
+
+    // helper to push edit
+    const pushEdit = (startLine, startCol, endLine, endCol, newText) => {
+      edits.push({ range: { start: { line: startLine, column: startCol }, end: { line: endLine, column: endCol } }, newText });
+    };
+
+    for (const f of flist) {
+      if (f.rule === 'unusedVariable') {
+        // find declaration line between var .. begin
+        let varStart = lines.findIndex(l => /^\s*var\b/i.test(l));
+        let beginLine = lines.findIndex(l => /\bbegin\b/i.test(l));
+        if (varStart !== -1 && beginLine !== -1 && beginLine > varStart) {
+          const varName = extractVarNameFromMessage(f.message);
+          const declRx = new RegExp(`^\\s*${escapeRegExp(varName)}\\s*:\\s*[^;]+;\\s*$`);
+          for (let i = varStart + 1; i < beginLine; i++) {
+            const l = lines[i];
+            if (declRx.test(l)) {
+              // remove this line including trailing newline
+              pushEdit(i, 0, i + 1, 0, '');
+              break;
+            }
+          }
+        } else {
+          // fallback: search entire file for declaration
+          const varName = extractVarNameFromMessage(f.message);
+          const declRx = new RegExp(`^\\s*${escapeRegExp(varName)}\\s*:\\s*[^;]+;\\s*$`);
+          for (let i = 0; i < lines.length; i++) {
+            const l = lines[i];
+            if (declRx.test(l)) {
+              pushEdit(i, 0, i + 1, 0, '');
+              break;
+            }
+          }
+        }
+      } else if (f.rule === 'xmlDoc') {
+        // Insert a minimal XML doc stub above the trigger/procedure
+        const name = extractMemberNameFromMessage(f.message);
+        const idx = lines.findIndex(l => new RegExp(`\b(?:trigger|procedure|local\s+procedure)\s+${escapeRegExp(name)}\b`).test(l));
+        if (idx !== -1) {
+          const stub = [
+            '    /// <summary>',
+            `    /// TODO: Document ${name}`,
+            '    /// </summary>'
+          ].join('\n') + '\n';
+          pushEdit(idx, 0, idx, 0, stub);
+        }
+      } else if (f.rule === 'braceOnNewLine') {
+        for (let i = 0; i < lines.length; i++) {
+          const l = lines[i];
+          const m = l.match(/^(.*\))\s*\{\s*$/);
+          if (m) {
+            pushEdit(i, 0, i + 1, 0, `${m[1]}\n{\n`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (edits.length) files.push({ file: rel, edits });
+  }
+  return { files };
+}
+
+function extractVarNameFromMessage(msg) {
+  const m = msg.match(/Variable '([^']+)'/);
+  return m ? m[1] : '';
+}
+
+function extractMemberNameFromMessage(msg) {
+  const m = msg.match(/for (?:trigger|procedure)\s+([A-Za-z0-9_]+)/i);
+  return m ? m[1] : 'Member';
+}
+
+async function applyEdits(root, files) {
+  const results = [];
+  for (const f of files) {
+    const abs = path.join(root, f.file);
+    const text = await fs.readFile(abs, 'utf-8');
+    const lines = text.split(/\r?\n/);
+    // Apply edits from bottom to top so offsets remain valid
+    const sorted = [...f.edits].sort((a, b) => (b.range.start.line - a.range.start.line) || (b.range.start.column - a.range.start.column));
+    let newText = text;
+    for (const e of sorted) {
+      const start = indexFromPos(lines, e.range.start.line, e.range.start.column);
+      const end = indexFromPos(lines, e.range.end.line, e.range.end.column);
+      newText = newText.slice(0, start) + e.newText + newText.slice(end);
+    }
+    await fs.writeFile(abs, newText, 'utf-8');
+    results.push({ file: f.file, applied: f.edits.length });
+  }
+  return { applied: results };
+}
+
+function indexFromPos(lines, line, col) {
+  let idx = 0;
+  for (let i = 0; i < line; i++) idx += lines[i].length + 1; // +1 for newline
+  return idx + col;
+}
