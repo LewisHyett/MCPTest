@@ -139,32 +139,79 @@ function renderReview(guidelines, findings, opts = {}) {
 }
 
 async function main() {
-  const server = new Server({ name: 'al-reviewer', version: '0.1.0' }, { capabilities: { tools: {} } });
+  const server = new Server(
+    { name: 'al-reviewer', version: '0.1.0' }, 
+    { capabilities: { tools: {} } }
+  );
+
+  // Add error handling for server events
+  server.onerror = (error) => {
+    console.error('[MCP Server Error]:', error);
+  };
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
         name: 'review_al_repository',
         description: 'Friendly review of AL files against guidelines in README.md, returning a human-readable summary.',
-        inputSchema: { type: 'object', properties: { repoPath: { type: 'string' } }, required: ['repoPath'] }
+        inputSchema: { 
+          type: 'object', 
+          properties: { 
+            repoPath: { type: 'string', description: 'Path to the AL repository to review' } 
+          }, 
+          required: ['repoPath'] 
+        }
       }
     ]
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const { name, arguments: args } = req.params;
-    const guidelines = await loadGuidelines();
-    const repoPath = args.repoPath || repoRoot;
-    if (name === 'review_al_repository') {
-      const findings = await lintRepo(repoPath, ['**/*.al'], {});
-      const text = renderReview(guidelines, findings, {});
-      return { content: [{ type: 'text', text }, { type: 'json', data: { findings } }] };
+    try {
+      const { name, arguments: args } = req.params;
+      const guidelines = await loadGuidelines();
+      const repoPath = args.repoPath || repoRoot;
+      
+      if (name === 'review_al_repository') {
+        const findings = await lintRepo(repoPath, ['**/*.al'], {});
+        const text = renderReview(guidelines, findings, {});
+        return { content: [{ type: 'text', text }, { type: 'json', data: { findings } }] };
+      }
+      
+      return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
+    } catch (error) {
+      console.error('[Tool Error]:', error);
+      return { 
+        content: [{ 
+          type: 'text', 
+          text: `Error executing tool: ${error.message}` 
+        }] 
+      };
     }
-    return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
   });
 
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  
+  // Add connection event handlers
+  transport.onclose = () => {
+    console.error('[Transport] Connection closed');
+    process.exit(0);
+  };
+
+  transport.onerror = (error) => {
+    console.error('[Transport Error]:', error);
+    process.exit(1);
+  };
+
+  // Signal that server is ready
+  console.error('[MCP Server] Starting AL Reviewer server...');
+  
+  try {
+    await server.connect(transport);
+    console.error('[MCP Server] Connected and ready');
+  } catch (error) {
+    console.error('[MCP Server] Failed to connect:', error);
+    process.exit(1);
+  }
 }
 
 // ---------------- CLI mode for quick local tests ----------------
@@ -189,11 +236,34 @@ async function cli() {
 }
 
 (async () => {
+  // Handle process signals gracefully
+  process.on('SIGINT', () => {
+    console.error('[MCP Server] Received SIGINT, shutting down gracefully...');
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    console.error('[MCP Server] Received SIGTERM, shutting down gracefully...');
+    process.exit(0);
+  });
+
+  process.on('uncaughtException', (error) => {
+    console.error('[MCP Server] Uncaught exception:', error);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[MCP Server] Unhandled rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+  });
+
   try {
     const handled = await cli();
-    if (!handled) await main();
+    if (!handled) {
+      await main();
+    }
   } catch (err) {
-    console.error(err);
+    console.error('[MCP Server] Fatal error:', err);
     process.exit(1);
   }
 })();

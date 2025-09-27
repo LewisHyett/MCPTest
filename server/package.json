@@ -5,7 +5,9 @@
   "type": "module",
   "main": "index.mjs",
   "scripts": {
-    "start": "node index.mjs"
+    "start": "node index.mjs",
+    "dev": "node --inspect index.mjs",
+    "test": "node index.mjs review --repo ../ALProject1"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.2.0",
