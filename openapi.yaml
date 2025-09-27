@@ -2,14 +2,14 @@ openapi: 3.0.0
 info:
   title: AL Coding Standards API
   version: 1.0.0
-  description: API to access AL coding standards markdown document
+  description: API to access AL coding standards from README.md document
 servers:
   - url: https://api.github.com/repos/LewisHyett/MCPTest/contents
 paths:
-  /coding-standards.md:
+  /README.md:
     get:
-      summary: Get AL coding standards
-      description: Retrieves the content of the AL coding standards markdown file
+      summary: Get AL coding standards from README
+      description: Retrieves the content of the README.md file containing AL coding standards
       responses:
         '200':
           description: Successful response
@@ -20,8 +20,10 @@ paths:
                 properties:
                   content:
                     type: string
-                    description: Base64 encoded markdown content
+                    description: Base64 encoded README markdown content
                   encoding:
                     type: string
                     example: "base64"
-
+                  name:
+                    type: string
+                    example: "README.md"
