@@ -8,20 +8,11 @@ import fg from 'fast-glob';
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
-async function loadPersona() {
+async function loadGuidelines() {
   try {
-    return await fs.readFile(path.join(repoRoot, 'persona.md'), 'utf-8');
+    return await fs.readFile(path.join(repoRoot, 'README.md'), 'utf-8');
   } catch {
-    return 'Senior AL reviewer: direct, constructive, enforce TES standards.';
-  }
-}
-
-async function loadStandards() {
-  try {
-    const raw = await fs.readFile(path.join(repoRoot, 'standards.json'), 'utf-8');
-    return JSON.parse(raw).rules || {};
-  } catch {
-    return {};
+    return 'Guidelines: Keep code clear, documented, and maintainable. Prefer clear names, avoid unused variables, and ensure formatting is consistent.';
   }
 }
 
@@ -115,7 +106,7 @@ async function lintRepo(root, globs, rules) {
   return all;
 }
 
-function renderReview(persona, findings, opts = {}) {
+function renderReview(guidelines, findings, opts = {}) {
   const bySeverity = { blocker: [], major: [], minor: [], info: [] };
   for (const f of findings) bySeverity[f.severity ?? 'info'].push(f);
   const sevIcon = { blocker: '⛔', major: '❗', minor: '⚠️', info: '💡' };
@@ -123,7 +114,7 @@ function renderReview(persona, findings, opts = {}) {
   lines.push('## Summary');
   const total = findings.length;
   const sev = Object.entries(bySeverity).map(([k,v]) => `${k}:${v.length}`).join(', ');
-  lines.push(`- ✅ Analyzed repository. Findings: ${total}.`);
+  lines.push(`- ✅ Reviewed project against README guidelines. Findings: ${total}.`);
   lines.push(`- 🧭 Severity breakdown: ${sev}.`);
   if (opts.focus?.length) lines.push(`- 🎯 Focus: ${opts.focus.join(', ')}`);
   lines.push('');
@@ -140,10 +131,10 @@ function renderReview(persona, findings, opts = {}) {
   lines.push('');
   lines.push('## Next steps');
   lines.push('- [ ] Address major/blocker items first, then minors.');
-  lines.push('- [ ] Re-run lint and raise PR.');
+  lines.push('- [ ] Save changes and re-run review.');
   lines.push('');
-  lines.push('## Reviewer persona');
-  lines.push(persona.split('\n').map(l => `> ${l}`).join('\n'));
+  lines.push('## Guidelines reference');
+  lines.push(guidelines.split('\n').map(l => `> ${l}`).join('\n'));
   return lines.join('\n');
 }
 
@@ -153,98 +144,21 @@ async function main() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
-        name: 'lint_al_repository',
-        description: 'Lint AL files against TES standards.json',
-        inputSchema: { type: 'object', properties: { repoPath: { type: 'string', description: 'Path to repository root' } }, required: ['repoPath'] }
-      },
-      {
         name: 'review_al_repository',
-        description: 'Persona-shaped human review of AL code based on standards.json and persona.md',
-        inputSchema: { type: 'object', properties: { repoPath: { type: 'string' }, focus: { type: 'array', items: { type: 'string' } } }, required: ['repoPath'] }
-      },
-      {
-        name: 'propose_fixes',
-        description: 'Suggest non-destructive edits for findings (does not apply changes).',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            repoPath: { type: 'string' },
-            focusRules: { type: 'array', items: { type: 'string' }, description: 'Optional rule filter, e.g., ["unusedVariable","xmlDoc"]' }
-          },
-          required: ['repoPath']
-        }
-      },
-      {
-        name: 'apply_edits',
-        description: 'Apply a previously proposed set of edits. Requires confirm=true.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            repoPath: { type: 'string' },
-            files: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  file: { type: 'string' },
-                  edits: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        range: {
-                          type: 'object',
-                          properties: {
-                            start: { type: 'object', properties: { line: { type: 'number' }, column: { type: 'number' } }, required: ['line','column'] },
-                            end: { type: 'object', properties: { line: { type: 'number' }, column: { type: 'number' } }, required: ['line','column'] }
-                          },
-                          required: ['start','end']
-                        },
-                        newText: { type: 'string' }
-                      },
-                      required: ['range','newText']
-                    }
-                  }
-                },
-                required: ['file','edits']
-              }
-            },
-            confirm: { type: 'boolean', description: 'Must be true to write changes' }
-          },
-          required: ['repoPath','files','confirm']
-        }
+        description: 'Friendly review of AL files against guidelines in README.md, returning a human-readable summary.',
+        inputSchema: { type: 'object', properties: { repoPath: { type: 'string' } }, required: ['repoPath'] }
       }
     ]
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
-    const persona = await loadPersona();
-    const standards = await loadStandards();
+    const guidelines = await loadGuidelines();
     const repoPath = args.repoPath || repoRoot;
-    if (name === 'lint_al_repository') {
-      const findings = await lintRepo(repoPath, ['**/*.al'], standards);
-      return { content: [{ type: 'json', data: { findings } }] };
-    }
     if (name === 'review_al_repository') {
-      const findings = await lintRepo(repoPath, ['**/*.al'], standards);
-      const text = renderReview(persona, findings, { focus: args.focus });
+      const findings = await lintRepo(repoPath, ['**/*.al'], {});
+      const text = renderReview(guidelines, findings, {});
       return { content: [{ type: 'text', text }, { type: 'json', data: { findings } }] };
-    }
-    if (name === 'propose_fixes') {
-      const findings = await lintRepo(repoPath, ['**/*.al'], standards);
-      const filtered = Array.isArray(args.focusRules) && args.focusRules.length
-        ? findings.filter(f => args.focusRules.includes(f.rule))
-        : findings;
-      const proposal = await proposeFixes(repoPath, filtered);
-      return { content: [{ type: 'json', data: proposal }] };
-    }
-    if (name === 'apply_edits') {
-      if (!args.confirm) {
-        return { content: [{ type: 'text', text: 'Edits not applied: confirm=false. Please review and re-run with confirm=true.' }] };
-      }
-      const result = await applyEdits(repoPath, args.files);
-      return { content: [{ type: 'json', data: result }] };
     }
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
   });
@@ -256,7 +170,7 @@ async function main() {
 // ---------------- CLI mode for quick local tests ----------------
 async function cli() {
   const cmd = process.argv[2];
-  if (!cmd || (cmd !== 'lint' && cmd !== 'review' && cmd !== 'propose' && cmd !== 'apply')) return false; // not CLI mode
+  if (!cmd || (cmd !== 'review')) return false; // not CLI mode
   const getArg = (name, def) => {
     const i = process.argv.indexOf(name);
     if (i !== -1 && i + 1 < process.argv.length) return process.argv[i + 1];
@@ -265,30 +179,11 @@ async function cli() {
   const repoPath = getArg('--repo', path.resolve(repoRoot, '..'));
   const focusArg = getArg('--focus', '');
   const focus = focusArg ? focusArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-  const persona = await loadPersona();
-  const standards = await loadStandards();
-  const findings = await lintRepo(repoPath, ['**/*.al'], standards);
-  if (cmd === 'lint') {
-    console.log(JSON.stringify({ findings }, null, 2));
-  } else if (cmd === 'review') {
-    const text = renderReview(persona, findings, { focus });
+  const guidelines = await loadGuidelines();
+  const findings = await lintRepo(repoPath, ['**/*.al'], {});
+  if (cmd === 'review') {
+    const text = renderReview(guidelines, findings, { focus });
     console.log(text);
-  } else if (cmd === 'propose') {
-    const proposal = await proposeFixes(repoPath, findings);
-    console.log(JSON.stringify(proposal, null, 2));
-  } else if (cmd === 'apply') {
-    const proposalPath = getArg('--proposal', 'proposal.json');
-    const confirm = (getArg('--confirm', 'false') === 'true');
-    if (!confirm) {
-      console.log('Edits not applied: confirm=false. Pass --confirm true to apply.');
-      return true;
-    }
-    // Read proposal from file (robust for PowerShell encodings) or stdin when path is '-'
-    const buf = proposalPath === '-' ? await readAllStdin() : await fs.readFile(proposalPath);
-    const raw = decodeBufferToString(buf);
-    const proposal = JSON.parse(stripUtf8Bom(raw));
-    const result = await applyEdits(repoPath, proposal.files || []);
-    console.log(JSON.stringify(result, null, 2));
   }
   return true;
 }
@@ -308,151 +203,4 @@ function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// ------- Fix proposal and application helpers -------
-async function proposeFixes(root, findings) {
-  const byFile = new Map();
-  for (const f of findings) {
-    if (!byFile.has(f.file)) byFile.set(f.file, []);
-    byFile.get(f.file).push(f);
-  }
-  const files = [];
-  for (const [rel, flist] of byFile.entries()) {
-    const abs = path.join(root, rel);
-    const text = await fs.readFile(abs, 'utf-8');
-    const lines = text.split(/\r?\n/);
-    const edits = [];
-
-    // helper to push edit
-    const pushEdit = (startLine, startCol, endLine, endCol, newText) => {
-      edits.push({ range: { start: { line: startLine, column: startCol }, end: { line: endLine, column: endCol } }, newText });
-    };
-
-    for (const f of flist) {
-      if (f.rule === 'unusedVariable') {
-        // find declaration line between var .. begin
-        let varStart = lines.findIndex(l => /^\s*var\b/i.test(l));
-        let beginLine = lines.findIndex(l => /\bbegin\b/i.test(l));
-        if (varStart !== -1 && beginLine !== -1 && beginLine > varStart) {
-          const varName = extractVarNameFromMessage(f.message);
-          const declRx = new RegExp(`^\\s*${escapeRegExp(varName)}\\s*:\\s*[^;]+;\\s*$`);
-          for (let i = varStart + 1; i < beginLine; i++) {
-            const l = lines[i];
-            if (declRx.test(l)) {
-              // remove this line including trailing newline
-              pushEdit(i, 0, i + 1, 0, '');
-              break;
-            }
-          }
-        } else {
-          // fallback: search entire file for declaration
-          const varName = extractVarNameFromMessage(f.message);
-          const declRx = new RegExp(`^\\s*${escapeRegExp(varName)}\\s*:\\s*[^;]+;\\s*$`);
-          for (let i = 0; i < lines.length; i++) {
-            const l = lines[i];
-            if (declRx.test(l)) {
-              pushEdit(i, 0, i + 1, 0, '');
-              break;
-            }
-          }
-        }
-      } else if (f.rule === 'xmlDoc') {
-        // Insert a minimal XML doc stub above the trigger/procedure
-        const name = extractMemberNameFromMessage(f.message);
-        const idx = lines.findIndex(l => new RegExp(`\\b(?:trigger|procedure|local\\s+procedure)\\s+${escapeRegExp(name)}\\b`, 'i').test(l));
-        if (idx !== -1) {
-          const stub = [
-            '    /// <summary>',
-            `    /// TODO: Document ${name}`,
-            '    /// </summary>'
-          ].join('\n') + '\n';
-          pushEdit(idx, 0, idx, 0, stub);
-        }
-      } else if (f.rule === 'braceOnNewLine') {
-        for (let i = 0; i < lines.length; i++) {
-          const l = lines[i];
-          const m = l.match(/^(.*\))\s*\{\s*$/);
-          if (m) {
-            pushEdit(i, 0, i + 1, 0, `${m[1]}\n{\n`);
-            break;
-          }
-        }
-      }
-    }
-
-    if (edits.length) files.push({ file: rel, edits });
-  }
-  return { files };
-}
-
-function extractVarNameFromMessage(msg) {
-  const m = msg.match(/Variable '([^']+)'/);
-  return m ? m[1] : '';
-}
-
-function extractMemberNameFromMessage(msg) {
-  const m = msg.match(/for (?:trigger|procedure)\s+([A-Za-z0-9_]+)/i);
-  return m ? m[1] : 'Member';
-}
-
-async function applyEdits(root, files) {
-  const results = [];
-  for (const f of files) {
-    const abs = path.join(root, f.file);
-    const text = await fs.readFile(abs, 'utf-8');
-    const lines = text.split(/\r?\n/);
-    const newlineLen = text.includes('\r\n') ? 2 : 1;
-    // Apply edits from bottom to top so offsets remain valid
-    const sorted = [...f.edits].sort((a, b) => (b.range.start.line - a.range.start.line) || (b.range.start.column - a.range.start.column));
-    let newText = text;
-    for (const e of sorted) {
-      const start = indexFromPos(lines, e.range.start.line, e.range.start.column, newlineLen);
-      const end = indexFromPos(lines, e.range.end.line, e.range.end.column, newlineLen);
-      newText = newText.slice(0, start) + e.newText + newText.slice(end);
-    }
-    await fs.writeFile(abs, newText, 'utf-8');
-    results.push({ file: f.file, applied: f.edits.length });
-  }
-  return { applied: results };
-}
-
-function indexFromPos(lines, line, col, newlineLen = 1) {
-  let idx = 0;
-  for (let i = 0; i < line; i++) idx += lines[i].length + newlineLen; // include newline length
-  return idx + col;
-}
-
-// --------- Encoding helpers (handle PowerShell UTF-16, BOM) ---------
-function stripUtf8Bom(text) {
-  if (text.charCodeAt(0) === 0xFEFF) return text.slice(1);
-  return text;
-}
-
-async function readAllStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
-function decodeBufferToString(buf) {
-  // Detect BOMs and common encodings: UTF-8, UTF-16 LE/BE
-  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
-    return buf.slice(3).toString('utf8');
-  }
-  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
-    // UTF-16 LE BOM
-    return new TextDecoder('utf-16le').decode(buf);
-  }
-  if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
-    // UTF-16 BE BOM
-    return new TextDecoder('utf-16be').decode(buf);
-  }
-  // Heuristic: many NULs indicate UTF-16LE without BOM (common when redirected via PowerShell)
-  let nulCount = 0;
-  for (let i = 0; i < Math.min(buf.length, 64); i++) if (buf[i] === 0) nulCount++;
-  if (nulCount > 10) {
-    return new TextDecoder('utf-16le').decode(buf);
-  }
-  return buf.toString('utf8');
-}
+// (Removed propose/apply helpers; editor UX can offer suggestions natively.)
