@@ -283,8 +283,10 @@ async function cli() {
       console.log('Edits not applied: confirm=false. Pass --confirm true to apply.');
       return true;
     }
-    const raw = await fs.readFile(proposalPath, 'utf-8');
-    const proposal = JSON.parse(raw);
+    // Read proposal from file (robust for PowerShell encodings) or stdin when path is '-'
+    const buf = proposalPath === '-' ? await readAllStdin() : await fs.readFile(proposalPath);
+    const raw = decodeBufferToString(buf);
+    const proposal = JSON.parse(stripUtf8Bom(raw));
     const result = await applyEdits(repoPath, proposal.files || []);
     console.log(JSON.stringify(result, null, 2));
   }
@@ -356,7 +358,7 @@ async function proposeFixes(root, findings) {
       } else if (f.rule === 'xmlDoc') {
         // Insert a minimal XML doc stub above the trigger/procedure
         const name = extractMemberNameFromMessage(f.message);
-        const idx = lines.findIndex(l => new RegExp(`\b(?:trigger|procedure|local\s+procedure)\s+${escapeRegExp(name)}\b`).test(l));
+        const idx = lines.findIndex(l => new RegExp(`\\b(?:trigger|procedure|local\\s+procedure)\\s+${escapeRegExp(name)}\\b`, 'i').test(l));
         if (idx !== -1) {
           const stub = [
             '    /// <summary>',
@@ -398,12 +400,13 @@ async function applyEdits(root, files) {
     const abs = path.join(root, f.file);
     const text = await fs.readFile(abs, 'utf-8');
     const lines = text.split(/\r?\n/);
+    const newlineLen = text.includes('\r\n') ? 2 : 1;
     // Apply edits from bottom to top so offsets remain valid
     const sorted = [...f.edits].sort((a, b) => (b.range.start.line - a.range.start.line) || (b.range.start.column - a.range.start.column));
     let newText = text;
     for (const e of sorted) {
-      const start = indexFromPos(lines, e.range.start.line, e.range.start.column);
-      const end = indexFromPos(lines, e.range.end.line, e.range.end.column);
+      const start = indexFromPos(lines, e.range.start.line, e.range.start.column, newlineLen);
+      const end = indexFromPos(lines, e.range.end.line, e.range.end.column, newlineLen);
       newText = newText.slice(0, start) + e.newText + newText.slice(end);
     }
     await fs.writeFile(abs, newText, 'utf-8');
@@ -412,8 +415,44 @@ async function applyEdits(root, files) {
   return { applied: results };
 }
 
-function indexFromPos(lines, line, col) {
+function indexFromPos(lines, line, col, newlineLen = 1) {
   let idx = 0;
-  for (let i = 0; i < line; i++) idx += lines[i].length + 1; // +1 for newline
+  for (let i = 0; i < line; i++) idx += lines[i].length + newlineLen; // include newline length
   return idx + col;
+}
+
+// --------- Encoding helpers (handle PowerShell UTF-16, BOM) ---------
+function stripUtf8Bom(text) {
+  if (text.charCodeAt(0) === 0xFEFF) return text.slice(1);
+  return text;
+}
+
+async function readAllStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function decodeBufferToString(buf) {
+  // Detect BOMs and common encodings: UTF-8, UTF-16 LE/BE
+  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+    return buf.slice(3).toString('utf8');
+  }
+  if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+    // UTF-16 LE BOM
+    return new TextDecoder('utf-16le').decode(buf);
+  }
+  if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+    // UTF-16 BE BOM
+    return new TextDecoder('utf-16be').decode(buf);
+  }
+  // Heuristic: many NULs indicate UTF-16LE without BOM (common when redirected via PowerShell)
+  let nulCount = 0;
+  for (let i = 0; i < Math.min(buf.length, 64); i++) if (buf[i] === 0) nulCount++;
+  if (nulCount > 10) {
+    return new TextDecoder('utf-16le').decode(buf);
+  }
+  return buf.toString('utf8');
 }
