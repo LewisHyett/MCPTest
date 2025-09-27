@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: API to access AL coding standards markdown document
 servers:
-  - url: https://api.github.com/repos/your-username/your-repo-name/contents
+  - url: https://api.github.com/repos/LewisHyett/MCPTest/contents
 paths:
   /coding-standards.md:
     get:
@@ -24,3 +24,4 @@ paths:
                   encoding:
                     type: string
                     example: "base64"
+
