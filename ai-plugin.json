@@ -1,17 +1,17 @@
 {
-  schema_version v1,
-  name_for_human Markdown Reader,
-  name_for_model markdown_reader,
-  description_for_human Reads and returns the contents of a markdown file.,
-  description_for_model Use this plugin to fetch the raw contents of a markdown file.,
-  auth {
-    type none
+  "schema_version": "v1",
+  "name_for_human": "AL Coding Standards",
+  "name_for_model": "al_coding_standards",
+  "description_for_human": "Provides access to Total Enterprise Solutions' Business Central AL coding guidelines and standards.",
+  "description_for_model": "Use this plugin to fetch coding standards, guidelines, and best practices for AL development at Total Enterprise Solutions. Reference these standards when providing code suggestions or reviewing AL code.",
+  "auth": {
+    "type": "none"
   },
-  api {
-    type openapi,
-    url httpsyourdomain.comopenapi.yaml
+  "api": {
+    "type": "openapi",
+    "url": "https://LewisHyett.github.io/MCPTest/openapi.yaml"
   },
-  logo_url httpsyourdomain.comlogo.png,
-  contact_email admin@yourdomain.com,
-  legal_info_url httpsyourdomain.comlegal
+  "logo_url": "https://LewisHyett.github.io/MCPTest/logo.png",
+  "contact_email": "dev-team@totalenterprisesolutions.com",
+  "legal_info_url": "https://totalenterprisesolutions.com/legal"
 }
