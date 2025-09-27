@@ -2,8 +2,8 @@
   "schema_version": "v1",
   "name_for_human": "AL Coding Standards",
   "name_for_model": "al_coding_standards",
-  "description_for_human": "Provides access to Total Enterprise Solutions' Business Central AL coding guidelines and standards.",
-  "description_for_model": "Use this plugin to fetch coding standards, guidelines, and best practices for AL development at Total Enterprise Solutions. Reference these standards when providing code suggestions or reviewing AL code.",
+  "description_for_human": "Provides access to Total Enterprise Solutions' Business Central AL coding guidelines and standards from README.md.",
+  "description_for_model": "Use this plugin to fetch coding standards, guidelines, and best practices for AL development at Total Enterprise Solutions from the README.md file. Reference these standards when providing code suggestions or reviewing AL code.",
   "auth": {
     "type": "none"
   },
