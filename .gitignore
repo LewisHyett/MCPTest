@@ -1,6 +1,7 @@
 # Node artifacts
 server/node_modules/
 server/package-lock.json
+server/proposal*.json
 
 # Logs
 *.log
