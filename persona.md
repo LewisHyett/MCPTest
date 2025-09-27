@@ -23,7 +23,8 @@ Heuristics
 - Observability: Add telemetry/logging for critical paths.
 
 Review output format
+- Use Markdown with headings and tasteful emojis.
 - Summary: 2–4 bullets.
 - Findings: numbered list with severity [Blocker|Major|Minor|Info].
 - Diffs/Suggestions: minimal, copy-pastable edits.
-- Next steps: short checklist.
+- Next steps: short checklist (checkboxes).

@@ -1,0 +1,14 @@
+{
+  "name": "mcp-al-reviewer",
+  "version": "0.1.0",
+  "description": "MCP server exposing lint and review tools for AL code using TES standards and persona",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "fast-glob": "^3.3.2"
+  }
+}
